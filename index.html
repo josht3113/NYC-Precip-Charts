@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NYC Precipitation Heatmap</title>
+<style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#0A0A0A;color:#e0e0e0;}</style>
+</head>
+<body>
+<div id="root"><div style="color:#4caf50;padding:20px;font-family:sans-serif;">Loading...</div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+var ce=React.createElement;
+var useState=React.useState;
+var useMemo=React.useMemo;
+var useEffect=React.useEffect;
+var BASE='https://josht3113.github.io/NYC-Precip-Charts/';
+var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var FMONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+var HOURS=['Midnight','1','2','3','4','5','6','7','8','9','10','11','Noon','1','2','3','4','5','6','7','8','9','10','11'];
+var YEARS=[1943,1944,1965,1966,1967,1968,1969,1970,1971,1972,1973,1974,1975,1976,1977,1978,1979,1980,1981,1982,1984,1995,1996,1997,1998,1999,2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025];
+var FONT="'Segoe UI',system-ui,sans-serif";
+var CW=29,CH=26,LW=72,AW=52;
+var PRECIP_STOPS=[
+[0.00, [255,255,255]],
+[0.01, [232,245,233]],
+[0.10, [165,214,167]],
+[0.25, [102,187,106]],
+[0.50, [67,160,71]],
+[0.75, [46,125,50]],
+[1.00, [27,94,32]]
+];
+function lrp(a,b,t){return Math.round(a+(b-a)*t);}
+function precipColor(val){
+if(val===null||val===undefined){return '#111';}
+if(val===0){return '#ffffff';}
+if(val===-1){return 'rgb(232,245,233)';}
+var v=Math.min(val,1.0);
+var stops=PRECIP_STOPS;
+if(v<=stops[0][0]){return 'rgb('+stops[0][1].join(',')+')';}
+if(v>=stops[stops.length-1][0]){return 'rgb('+stops[stops.length-1][1].join(',')+')';}
+for(var i=0;i<stops.length-1;i++){
+if(v>=stops[i][0]&&v<=stops[i+1][0]){
+var t=(v-stops[i][0])/(stops[i+1][0]-stops[i][0]);
+var a=stops[i][1],b=stops[i+1][1];
+return 'rgb('+lrp(a[0],b[0],t)+','+lrp(a[1],b[1],t)+','+lrp(a[2],b[2],t)+')';
+}
+}
+return 'rgb(27,94,32)';
+}
+function textColor(val){
+if(val===null||val===undefined){return '#fff';}
+if(val===0){return '#ccc';}
+if(val===-1){return '#2e7d32';}
+if(val<0.5){return '#1b5e20';}
+return '#e8f5e9';
+}
+function fmt(val){
+if(val===null||val===undefined){return '';}
+if(val===0){return '';}
+if(val===-1){return 'T';}
+return val.toFixed(2);
+}
+function sumArr(arr){
+var t=0,hasData=false;
+for(var i=0;i<arr.length;i++){
+if(arr[i]!==null&&arr[i]!==undefined){
+hasData=true;
+if(arr[i]>0){t+=arr[i];}
+}
+}
+return hasData?t:null;
+}
+function gradCss(){
+return 'linear-gradient(to right,'+
+'#ffffff 0%,'+
+'rgb(232,245,233) 5%,'+
+'rgb(165,214,167) 20%,'+
+'rgb(102,187,106) 40%,'+
+'rgb(67,160,71) 60%,'+
+'rgb(46,125,50) 80%,'+
+'rgb(27,94,32) 100%'+
+')';
+}
+function App(){
+var s1=useState(2000);var year=s1[0],setYear=s1[1];
+var s2=useState('Jan');var month=s2[0],setMonth=s2[1];
+var s3=useState(null);var data=s3[0],setData=s3[1];
+var s4=useState(true);var loading=s4[0],setLoading=s4[1];
+var s5=useState(null);var err=s5[0],setErr=s5[1];
+useEffect(function(){
+setLoading(true);setErr(null);setData(null);
+fetch(BASE+year+'_precip.json')
+.then(function(r){if(!r.ok){throw new Error('HTTP '+r.status);}return r.json();})
+.then(function(d){setData(d);setLoading(false);})
+.catch(function(ex){setErr(ex.message);setLoading(false);});
+},[year]);
+var md=data&&data[month];
+var nDays=md?md.nDays:31;
+var grid=md?md.precip:null;
+var mIdx=MONTHS.indexOf(month);
+var rowTotals=useMemo(function(){
+if(!grid){return new Array(24).fill(null);}
+return grid.map(function(row){return sumArr(row.slice(0,nDays));});
+},[grid,nDays]);
+var colTotals=useMemo(function(){
+if(!grid){return [];}
+return Array.from({length:nDays},function(_,d){
+return sumArr(grid.map(function(r){return r[d];}));
+});
+},[grid,nDays]);
+var grandTotal=useMemo(function(){
+return sumArr(colTotals);
+},[colTotals]);
+var children=[];
+children.push(ce('div',{key:'title',style:{marginBottom:10}},
+ce('div',{style:{color:'#fff',fontSize:22,fontWeight:700}},'Precipitation | New York City, NY'),
+ce('div',{style:{color:'#4caf50',fontSize:16,fontWeight:700,marginTop:2}},FMONTHS[mIdx]+' '+year)));
+children.push(ce('div',{key:'year',style:{marginBottom:8}},
+ce('label',{style:{fontSize:11,color:'#888',marginRight:8}},'Year:'),
+ce('select',{value:year,onChange:function(ev){setYear(Number(ev.target.value));},
+style:{background:'#1a1a1a',border:'1px solid #333',color:'#4caf50',padding:'3px 8px',
+fontSize:12,cursor:'pointer',borderRadius:2,fontFamily:FONT,fontWeight:700}},
+YEARS.map(function(y){return ce('option',{key:y,value:y},y);}))));
+children.push(ce('div',{key:'legend',style:{display:'flex',alignItems:'center',gap:12,marginBottom:10,flexWrap:'wrap'}},
+ce('div',{},
+ce('div',{style:{height:12,width:220,background:gradCss(),border:'1px solid rgba(255,255,255,0.1)'}}),
+ce('div',{style:{display:'flex',justifyContent:'space-between',width:220,marginTop:2}},
+['None','T','0.10"','0.25"','0.50"','1.00"+'].map(function(l,i){
+return ce('span',{key:i,style:{fontSize:9,color:'#888'}},l);}))),
+ce('div',{style:{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'#888'}},
+ce('div',{style:{width:12,height:12,background:'#111',border:'1px solid #333'}}),
+'Missing')));
+children.push(ce('div',{key:'months',style:{display:'flex',gap:3,marginBottom:6,flexWrap:'wrap'}},
+MONTHS.map(function(m){
+return ce('button',{key:m,onClick:function(){setMonth(m);},
+style:{background:m===month?'#0a2010':'#111',
+border:'1px solid '+(m===month?'#4caf50':'#2a2a2a'),
+color:m===month?'#4caf50':'#8899aa',
+padding:'3px 9px',fontSize:12,cursor:'pointer',borderRadius:2,fontFamily:FONT}},m);})));
+if(loading){children.push(ce('div',{key:'load',style:{color:'#4caf50',padding:'20px 0'}},'Loading '+year+'...'));}
+if(err){children.push(ce('div',{key:'err',style:{color:'#f66',padding:'20px 0'}},'Error: '+err));}
+if(!loading&&!err&&grid){
+var hdr=[ce('div',{key:'lh',style:{width:LW,flexShrink:0}})];
+for(var d=0;d<nDays;d++){
+hdr.push(ce('div',{key:d,style:{width:CW,flexShrink:0,textAlign:'center',color:'#fff',fontSize:11,fontWeight:700,lineHeight:CH+'px'}},d+1));
+}
+hdr.push(ce('div',{key:'sp',style:{width:8,flexShrink:0}}));
+hdr.push(ce('div',{key:'ah',style:{width:AW,flexShrink:0,textAlign:'center',color:'#4caf50',fontSize:11,fontWeight:700,lineHeight:CH+'px'}},'Total'));
+var rows=HOURS.map(function(lbl,h){
+var rt=rowTotals[h];
+var rtBg=rt!==null?precipColor(Math.min(rt,1.0)):'#111';
+var rtTxt=rt!==null&&rt>0.3?'#e8f5e9':'#1b5e20';
+if(rt===null){rtTxt='#555';}
+var rc=[ce('div',{key:'l',style:{width:LW,flexShrink:0,textAlign:'right',paddingRight:6,
+color:'#fff',fontSize:11,fontWeight:700,lineHeight:CH+'px',background:'#0A0A0A'}},lbl)];
+for(var d2=0;d2<nDays;d2++){
+var val=(grid[h]&&grid[h][d2]!==undefined)?grid[h][d2]:null;
+var bg=precipColor(val);
+var tc=textColor(val);
+rc.push(ce('div',{key:d2,style:{width:CW,height:CH,flexShrink:0,background:bg,
+display:'flex',alignItems:'center',justifyContent:'center',
+fontSize:10,color:tc,fontWeight:700,fontFamily:FONT,
+borderRight:'1px solid rgba(0,0,0,0.15)',
+borderBottom:'1px solid rgba(0,0,0,0.15)',userSelect:'none'}},fmt(val)));
+}
+rc.push(ce('div',{key:'sp',style:{width:8,flexShrink:0,height:CH,background:'#0A0A0A',borderBottom:'1px solid rgba(255,255,255,0.05)'}}));
+rc.push(ce('div',{key:'a',style:{width:AW,height:CH,flexShrink:0,background:rtBg,
+display:'flex',alignItems:'center',justifyContent:'center',
+fontSize:10,color:rtTxt,fontWeight:700,
+borderLeft:'1px solid rgba(76,175,80,0.3)',
+borderBottom:'1px solid rgba(0,0,0,0.2)'}},
+rt!==null?rt.toFixed(2)+'"':'—'));
+return ce('div',{key:h,style:{display:'flex',alignItems:'center'}},rc);
+});
+var ac=[ce('div',{key:'l',style:{width:LW,flexShrink:0,textAlign:'right',paddingRight:6,
+color:'#4caf50',fontSize:11,fontWeight:700,lineHeight:CH+'px',background:'#0A0A0A'}},'Total')];
+for(var d3=0;d3<colTotals.length;d3++){
+var ct=colTotals[d3];
+var ctBg=ct!==null?precipColor(Math.min(ct,1.5)*0.67):'#111';
+var ctTxt=ct!==null&&ct>0.5?'#e8f5e9':'#1b5e20';
+if(ct===null){ctTxt='#555';}
+ac.push(ce('div',{key:d3,style:{width:CW,height:CH,flexShrink:0,background:ctBg,
+display:'flex',alignItems:'center',justifyContent:'center',
+fontSize:10,color:ctTxt,fontWeight:700,
+borderTop:'1px solid rgba(76,175,80,0.25)',
+borderRight:'1px solid rgba(0,0,0,0.15)'}},
+ct!==null&&ct>0?ct.toFixed(2):''));
+}
+ac.push(ce('div',{key:'sp',style:{width:8,flexShrink:0,height:CH,background:'#0A0A0A'}}));
+ac.push(ce('div',{key:'gt',style:{width:AW,height:CH,flexShrink:0,
+background:'#0a2010',display:'flex',alignItems:'center',justifyContent:'center',
+fontSize:10,color:'#4caf50',fontWeight:700,
+borderTop:'1px solid rgba(76,175,80,0.3)',
+borderLeft:'1px solid rgba(76,175,80,0.3)'}},
+grandTotal!==null?grandTotal.toFixed(2)+'"':'—'));
+children.push(ce('div',{key:'grid',style:{display:'inline-block',border:'1.5px solid rgba(255,255,255,0.85)',borderRadius:2,overflow:'hidden'}},
+ce('div',{style:{overflowX:'auto'}},
+ce('div',{style:{display:'inline-block',minWidth:'max-content'}},
+ce('div',{style:{display:'flex',background:'#0A0A0A',marginBottom:1}},hdr),
+rows,
+ce('div',{style:{height:5,background:'#0A0A0A'}}),
+ce('div',{style:{display:'flex'}},ac)))));
+}
+children.push(ce('div',{key:'footer',style:{marginTop:10,fontSize:11,color:'#888'}},
+'Eastern Standard/Daylight Time | Data: IEM & NOAA | Chart: Josh Timlin'));
+return ce('div',{style:{background:'#0A0A0A',minHeight:'100vh',padding:'14px 12px',fontFamily:FONT,color:'#e0e0e0'}},children);
+}
+ReactDOM.createRoot(document.getElementById('root')).render(ce(App,null));
+</script>
+</body>
+</html>
